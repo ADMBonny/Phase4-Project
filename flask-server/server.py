@@ -26,10 +26,11 @@ def after_request(response):
 def get_comments():
     event_id = request.args.get('event_id')  # Get event ID from query parameters
     if event_id:
-        comments = Comment.query.filter_by(event_id=event_id).all()
+        comments = Comment.query.filter_by(event_id=event_id).order_by(Comment.created_at.desc()).all()
     else:
-        comments = Comment.query.all()
+        comments = Comment.query.order_by(Comment.created_at.desc()).all()
     return jsonify([comment.serialize() for comment in comments]), 200
+
 
 @app.route('/comments', methods=['POST'])
 def create_comment():
