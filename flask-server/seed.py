@@ -1,32 +1,48 @@
-import os
-from flask import Flask
+from server import app, db 
+from flask import Flask, jsonify
+from models import db, Event, Comment
 from faker import Faker
-from models import db, Comment
+import random
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///event_planning.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///events.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
-
-# Function to create database tables
-def create_tables():
-    with app.app_context():
-        db.create_all()
 
 fake = Faker()
 
-def generate_fake_comments(num_comments=10):
+def generate_data(num_events):
     with app.app_context():
-        create_tables()  # Create tables if they don't exist
-        event_id = 1
-        for _ in range(num_comments):
-            comment = Comment(
-                event_id=event_id,  # Use sequential event IDs
-                user_id=fake.random_int(min=1, max=50),  # Assuming user IDs range from 1 to 50
-                content=fake.paragraph()
+        # Generate events
+        for _ in range(num_events):
+            event = Event(
+                title=fake.sentence(),
+                description=fake.paragraph(),
+                date=fake.date_time(),
+                location=fake.city()
             )
-            db.session.add(comment)
-            event_id += 1  # Increment event ID for the next comment
+            db.session.add(event)
+        
+        # Generate comments separately
+        events = Event.query.all()
+        for event in events:
+            num_comments = random.randint(1, 3)  # Generate 1 to 3 comments for each event
+            for _ in range(num_comments):
+                comment = Comment(
+                    event_id=event.id,
+                    content=fake.text(),
+                )
+                db.session.add(comment)
+        
         db.session.commit()
 
+@app.route('/events', methods=['GET'])
+def get_events():
+    events = Event.query.all()
+    event_data = [{'title': event.title, 'description': event.description, 'date': event.date, 'location': event.location, 'comments': [{'content': comment.content} for comment in event.comments]} for event in events]
+    return jsonify(event_data)
+
 if __name__ == '__main__':
-    generate_fake_comments()
+    num_events_to_generate = 10  # Specify the number of events you want to generate
+    generate_data(num_events_to_generate)
+    app.run(debug=True)

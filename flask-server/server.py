@@ -1,20 +1,13 @@
-from flask import Flask, request, jsonify
-from models import db, Comment
-from flask_migrate import Migrate
+from flask import Flask, jsonify, request
+from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///event_planning.db'
-db.init_app(app)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///events.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-migrate = Migrate(app, db)
-
-def create_tables():
-    with app.app_context():
-        db.create_all()
-
-create_tables()
-
+# Configure CORS manually
 @app.after_request
 def after_request(response):
     response.headers.add('Access-Control-Allow-Origin', '*')
@@ -22,43 +15,56 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     return response
 
-@app.route('/comments', methods=['GET'])
-def get_comments():
-    event_id = request.args.get('event_id')  # Get event ID from query parameters
-    if event_id:
-        comments = Comment.query.filter_by(event_id=event_id).order_by(Comment.created_at.desc()).all()
-    else:
-        comments = Comment.query.order_by(Comment.created_at.desc()).all()
-    return jsonify([comment.serialize() for comment in comments]), 200
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
+class Event(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    date = db.Column(db.DateTime, nullable=False)
+    location = db.Column(db.String(100), nullable=False)
+    comments = db.relationship('Comment', backref='event', lazy=True)
 
-@app.route('/comments', methods=['POST'])
-def create_comment():
-    data = request.json
-    new_comment = Comment(
-        event_id=data['event_id'],
-        user_id=data['user_id'],
-        content=data['content']
-    )
-    db.session.add(new_comment)
-    db.session.commit()
-    return jsonify({'message': 'Comment created successfully'}), 201
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-@app.route('/comments/<int:comment_id>', methods=['PUT', 'DELETE'])
-def update_or_delete_comment(comment_id):
-    comment = Comment.query.get(comment_id)
-    if not comment:
-        return jsonify({'error': 'Comment not found'}), 404
+# Function to create initial database
+def create_initial_database():
+    with app.app_context():
+        db.create_all()
 
-    if request.method == 'PUT':
+# Define route for /events
+# Define route for /events
+@app.route('/events', methods=['GET', 'POST'])
+def events():
+    if request.method == 'GET':
+        # Handle GET request to fetch events with comments
+        events = Event.query.order_by(Event.id.desc()).all()  # Sort events by ID in descending order
+        event_data = []
+        for event in events:
+            comments = [{'id': comment.id, 'content': comment.content, 'created_at': comment.created_at}
+                        for comment in event.comments]
+            event_data.append({'id': event.id, 'title': event.title, 'description': event.description,
+                               'date': event.date.isoformat(), 'location': event.location,
+                               'comments': comments})
+        return jsonify(event_data)
+    elif request.method == 'POST':
+        # Handle POST request to create a new event
         data = request.json
-        comment.content = data['content']
+        new_event = Event(title=data['title'], description=data['description'],
+                          date=datetime.strptime(data['date'], '%Y-%m-%dT%H:%M:%S'),
+                          location=data['location'])
+        db.session.add(new_event)
         db.session.commit()
-        return jsonify({'message': 'Comment updated successfully'}), 200
-    elif request.method == 'DELETE':
-        db.session.delete(comment)
-        db.session.commit()
-        return jsonify({'message': 'Comment deleted successfully'}), 200
+        return jsonify({'message': 'Event created successfully', 'id': new_event.id}), 201
+
+
+# Routes and other Flask code...
 
 if __name__ == '__main__':
+    create_initial_database()  # Create initial database if running as main script
     app.run(debug=True)
