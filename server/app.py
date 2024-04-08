@@ -1,10 +1,11 @@
-from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
+from flask import Flask, jsonify
+
+from extensions import db,  LoginManager
+from flask_cors import CORS
+
 import os
 
 
-db = SQLAlchemy()
 login_manager = LoginManager()
 
 def create_app():
@@ -16,8 +17,16 @@ def create_app():
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
 
+    CORS(app)
+
     
     from auth import auth_bp
     app.register_blueprint(auth_bp)
 
+    @app.route('/')
+    def home():
+        return jsonify({'message': 'Welcome to the Flask application!'})
+
     return app
+
+

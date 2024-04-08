@@ -1,12 +1,12 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_login import login_user, logout_user, login_required
+from flask_login import login_user, logout_user, login_required, current_user
 from models import User
-from app import db
+from extensions import db
  
 
 
-auth_bp = Blueprint('auth', __name__)
+auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
 @auth_bp.route('/signup', methods=['POST'])
 def signup():
@@ -22,7 +22,7 @@ def signup():
     if existing_user:
         return jsonify({'error': 'User already exists'}), 400
 
-    hashed_password = generate_password_hash(password, method='sha256')
+    hashed_password = generate_password_hash(password)
     new_user = User(username=username, email=email, password=hashed_password)
     db.session.add(new_user)
     db.session.commit()
